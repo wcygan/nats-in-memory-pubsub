@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/nats-io/nats-server/v2/server"
@@ -11,23 +12,27 @@ import (
 func main() {
 	opts := &server.Options{}
 
-	// Initialize new server with options
-	ns, err := server.NewServer(opts)
+	// Initialize new natsServer with options
+	natsServer, err := server.NewServer(opts)
 
 	if err != nil {
 		panic(err)
 	}
 
-	// Start the server via goroutine
-	go ns.Start()
+	// Start the natsServer via goroutine
+	go natsServer.Start()
 
-	// Wait for server to be ready for connections
-	if !ns.ReadyForConnections(4 * time.Second) {
+	// Wait for natsServer to be ready for connections
+	if !natsServer.ReadyForConnections(4 * time.Second) {
 		panic("not ready for connection")
 	}
 
-	// Connect to server
-	nc, err := nats.Connect(ns.ClientURL())
+	log.Printf("NATS server is ready")
+
+	// Connect to natsServer
+	natsClient, err := nats.Connect(natsServer.ClientURL())
+
+	log.Printf("NATS client is connected")
 
 	if err != nil {
 		panic(err)
@@ -36,18 +41,33 @@ func main() {
 	subject := "my-subject"
 
 	// Subscribe to the subject
-	nc.Subscribe(subject, func(msg *nats.Msg) {
+	s, err := natsClient.Subscribe(subject, func(msg *nats.Msg) {
 		// Print message data
 		data := string(msg.Data)
 		fmt.Println(data)
 
-		// Shutdown the server (optional)
-		ns.Shutdown()
+		// Shutdown the natsServer (optional)
+		natsServer.Shutdown()
 	})
 
-	// Publish data to the subject
-	nc.Publish(subject, []byte("Hello embedded NATS!"))
+	log.Printf("Subscribed to subject: %s", subject)
 
-	// Wait for server shutdown
-	ns.WaitForShutdown()
+	if s == nil {
+		log.Fatalf("subscription is nil")
+	}
+
+	if err != nil {
+		log.Fatalf("error subscribing: %v", err)
+	}
+
+	log.Printf("Unsubscribed from subject: %s", subject)
+
+	// Publish data to the subject
+	err = natsClient.Publish(subject, []byte("Hello embedded NATS!"))
+	if err != nil {
+		log.Fatalf("error publishing: %v", err)
+	}
+
+	// Wait for natsServer shutdown
+	natsServer.WaitForShutdown()
 }
